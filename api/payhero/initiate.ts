@@ -7,8 +7,8 @@ const corsHeaders: Record<string, string> = {
 const PAYHERO_BASE_URL = "https://backend.payhero.co.ke";
 // Hardcoded for testing
 const PAYHERO_AUTH_TOKEN =
-  "Basic NDg3dUVBcGJ3cklKWlVJbXhEQnQ6RlNiWjRhUVJsdlF2TUZvSTFqUlVFMkp1MmJKR1dyRkJ6eFBiRlBWQw==";
-const PAYHERO_CHANNEL_ID = 11294;
+  "Basic RTdMT0k0RGJvMlNMc3ZYOUNGdzg6ZU9sR1o4alBuZktVSXREMzdwb29yOG5ya1lSd2t4R0VFTjhabGlacg==";
+const PAYHERO_CHANNEL_ID = 11378;
 
 function parseBody(req: { body?: unknown }): Record<string, unknown> {
   const raw = req.body;
