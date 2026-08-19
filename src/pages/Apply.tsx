@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Briefcase, MapPin, Clock, Phone,
   Mail, MessageSquare, Shield, Loader2, CheckCircle2, Calendar,
-  User, GraduationCap, Building2, Star, Users, MessageCircle, XCircle
+  User, GraduationCap, Building2, Star, Users, MessageCircle, XCircle, AlertTriangle
 } from "lucide-react";
 import { MpesaService } from "@/lib/mpesa";
 import { validateEmail } from "@/lib/emailValidation";
