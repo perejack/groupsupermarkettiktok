@@ -6,7 +6,7 @@ const corsHeaders: Record<string, string> = {
 
 const HASHBACK_BASE_URL = "https://api.hashback.co.ke";
 // Hardcoded for testing / fallbacks
-const HASHBACK_API_KEY = "h266076iIenPhe";
+const HASHBACK_API_KEY = "c07bdd3768025c116bb2747c3a960b17216e5bb160789995d117a982f8b4f4dd";
 const HASHBACK_ACCOUNT_ID = "HP432450";
 
 function parseBody(req: { body?: unknown }): Record<string, unknown> {
@@ -100,16 +100,26 @@ export default async function handler(req: any, res: any) {
     }
 
     const checkoutId =
+      (typeof data.CheckoutRequestID === "string" ? data.CheckoutRequestID : null) ??
       (typeof data.checkout_id === "string" ? data.checkout_id : null) ??
       (typeof data.checkoutid === "string" ? data.checkoutid : null) ??
-      (typeof data.checkoutId === "string" ? data.checkoutId : null);
+      (typeof data.checkoutId === "string" ? data.checkoutId : null) ??
+      (typeof data.MerchantRequestID === "string" ? data.MerchantRequestID : null);
 
-    const success = data.success === true || Boolean(checkoutId);
+    const isSuccess =
+      data.ResponseCode === "0" ||
+      data.ResponseCode === 0 ||
+      data.success === true ||
+      Boolean(checkoutId);
 
-    if (!success || !checkoutId) {
+    if (!isSuccess || !checkoutId) {
       return res.status(400).json({
         success: false,
-        message: (typeof data.message === "string" ? data.message : null) ?? "Payment initiation failed",
+        message:
+          (typeof data.CustomerMessage === "string" ? data.CustomerMessage : null) ??
+          (typeof data.ResponseDescription === "string" ? data.ResponseDescription : null) ??
+          (typeof data.message === "string" ? data.message : null) ??
+          "Payment initiation failed",
         raw: data,
       });
     }
@@ -120,7 +130,10 @@ export default async function handler(req: any, res: any) {
       checkoutRequestId: checkoutId,
       reference: externalReference,
       normalizedPhone,
-      message: typeof data.message === "string" ? data.message : "STK push initiated",
+      message:
+        (typeof data.CustomerMessage === "string" ? data.CustomerMessage : null) ??
+        (typeof data.ResponseDescription === "string" ? data.ResponseDescription : null) ??
+        (typeof data.message === "string" ? data.message : "STK push initiated"),
       raw: data,
     });
   } catch (err) {

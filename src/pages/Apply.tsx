@@ -299,7 +299,7 @@ const Apply = () => {
       case 1: return !!(fullName && phone && location && startTime && willingToTrain && (!email.trim() || emailValidation.valid));
       case 2: return !!(workType && interviewMode && employmentType && salary && education && experience);
       case 5: return !!(selectedDate && selectedTime && contactMethod && contactValue);
-      case 6: return true;
+      case 6: return !!(mpesaNumber && mpesaNumber.replace(/\D/g, "").length >= 9);
       default: return true;
     }
   };
@@ -346,9 +346,14 @@ const Apply = () => {
     setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
   };
 
-  // Handle M-Pesa payment via HashPay Modal SDK
+  // Handle direct M-Pesa STK push via HashBack
   const handlePayment = async () => {
     if (paymentStatus === 'processing') return;
+
+    if (!mpesaNumber || mpesaNumber.replace(/\D/g, '').length < 9) {
+      toast.error('Please enter a valid M-Pesa phone number');
+      return;
+    }
 
     // TikTok: AddPaymentInfo when user initiates payment
     trackTikTokAddPaymentInfo({
@@ -360,75 +365,23 @@ const Apply = () => {
 
     const newApplicationId = `APP${Date.now()}`;
     setApplicationId(newApplicationId);
+    setPaymentStatus('processing');
 
-    const hashpay = typeof window !== 'undefined' ? (window as any).HashPay : undefined;
+    const result = await MpesaService.initiateSTKPush(
+      mpesaNumber,
+      brand.processingFee,
+      newApplicationId,
+      'anonymous',
+      brand.name
+    );
 
-    if (hashpay && typeof hashpay.setup === 'function') {
-      setPaymentStatus('processing');
-      try {
-        const handler = hashpay.setup({
-          account: 'HP432450',
-          amount: brand.processingFee,
-          reference: newApplicationId,
-          onSuccess: (txn: any) => {
-            console.log('HashPay payment success:', txn);
-            const receipt = txn?.receipt || txn?.TransactionReceipt || txn?.checkoutid || newApplicationId;
-            setCheckoutRequestId(receipt);
-            setPaymentStatus('completed');
-            toast.success('Payment received! Finalizing application...');
-          },
-          onCancel: () => {
-            setPaymentStatus('idle');
-            toast.info('Payment modal was closed.');
-          },
-          onError: (err: any) => {
-            console.error('HashPay error:', err);
-            setPaymentStatus('failed');
-            toast.error(typeof err === 'string' ? err : 'Payment failed. Please try again.');
-          },
-        });
-
-        if (handler && typeof handler.openIframe === 'function') {
-          handler.openIframe();
-        } else if (typeof hashpay.pay === 'function') {
-          hashpay.pay({
-            account: 'HP432450',
-            amount: brand.processingFee,
-            reference: newApplicationId,
-            onSuccess: (txn: any) => {
-              const receipt = txn?.receipt || txn?.TransactionReceipt || newApplicationId;
-              setCheckoutRequestId(receipt);
-              setPaymentStatus('completed');
-              toast.success('Payment received! Finalizing application...');
-            },
-            onCancel: () => setPaymentStatus('idle'),
-            onError: () => setPaymentStatus('failed'),
-          });
-        }
-      } catch (err: any) {
-        console.error('HashPay modal trigger error:', err);
-        setPaymentStatus('failed');
-        toast.error('Failed to open payment modal. Please try again.');
-      }
+    if (result.success && result.checkoutRequestId) {
+      setCheckoutRequestId(result.checkoutRequestId);
+      setIsPolling(true);
+      pollPaymentStatus(result.checkoutRequestId);
     } else {
-      // Fallback to direct STK push service
-      setPaymentStatus('processing');
-      const result = await MpesaService.initiateSTKPush(
-        mpesaNumber || phone || '',
-        brand.processingFee,
-        newApplicationId,
-        'anonymous',
-        brand.name
-      );
-
-      if (result.success && result.checkoutRequestId) {
-        setCheckoutRequestId(result.checkoutRequestId);
-        setIsPolling(true);
-        pollPaymentStatus(result.checkoutRequestId);
-      } else {
-        setPaymentStatus('failed');
-        toast.error(result.error || 'Payment failed');
-      }
+      setPaymentStatus('failed');
+      toast.error(result.error || 'Payment failed. Please try again.');
     }
   };
 
