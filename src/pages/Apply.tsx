@@ -299,7 +299,7 @@ const Apply = () => {
       case 1: return !!(fullName && phone && location && startTime && willingToTrain && (!email.trim() || emailValidation.valid));
       case 2: return !!(workType && interviewMode && employmentType && salary && education && experience);
       case 5: return !!(selectedDate && selectedTime && contactMethod && contactValue);
-      case 6: return mpesaNumber.length >= 10;
+      case 6: return true;
       default: return true;
     }
   };
@@ -346,11 +346,11 @@ const Apply = () => {
     setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
   };
 
-  // Handle M-Pesa payment
+  // Handle M-Pesa payment via HashPay Modal SDK
   const handlePayment = async () => {
-    if (!mpesaNumber || paymentStatus === 'processing') return;
+    if (paymentStatus === 'processing') return;
 
-    // TikTok: AddPaymentInfo when user submits M-Pesa number
+    // TikTok: AddPaymentInfo when user initiates payment
     trackTikTokAddPaymentInfo({
       contentId: `${supermarket}_application_fee`,
       contentName: `${brand.name} application processing fee`,
@@ -358,29 +358,77 @@ const Apply = () => {
       currency: "KES",
     });
 
-    setPaymentStatus('processing');
-
-    // Generate application ID
     const newApplicationId = `APP${Date.now()}`;
     setApplicationId(newApplicationId);
 
-    const result = await MpesaService.initiateSTKPush(
-      mpesaNumber,
-      brand.processingFee,
-      newApplicationId,
-      'anonymous', // User ID - replace with actual auth
-      brand.name
-    );
+    const hashpay = typeof window !== 'undefined' ? (window as any).HashPay : undefined;
 
-    if (result.success && result.checkoutRequestId) {
-      setCheckoutRequestId(result.checkoutRequestId);
-      setIsPolling(true);
+    if (hashpay && typeof hashpay.setup === 'function') {
+      setPaymentStatus('processing');
+      try {
+        const handler = hashpay.setup({
+          account: 'HP432450',
+          amount: brand.processingFee,
+          reference: newApplicationId,
+          onSuccess: (txn: any) => {
+            console.log('HashPay payment success:', txn);
+            const receipt = txn?.receipt || txn?.TransactionReceipt || txn?.checkoutid || newApplicationId;
+            setCheckoutRequestId(receipt);
+            setPaymentStatus('completed');
+            toast.success('Payment received! Finalizing application...');
+          },
+          onCancel: () => {
+            setPaymentStatus('idle');
+            toast.info('Payment modal was closed.');
+          },
+          onError: (err: any) => {
+            console.error('HashPay error:', err);
+            setPaymentStatus('failed');
+            toast.error(typeof err === 'string' ? err : 'Payment failed. Please try again.');
+          },
+        });
 
-      // Start polling for payment status
-      pollPaymentStatus(result.checkoutRequestId);
+        if (handler && typeof handler.openIframe === 'function') {
+          handler.openIframe();
+        } else if (typeof hashpay.pay === 'function') {
+          hashpay.pay({
+            account: 'HP432450',
+            amount: brand.processingFee,
+            reference: newApplicationId,
+            onSuccess: (txn: any) => {
+              const receipt = txn?.receipt || txn?.TransactionReceipt || newApplicationId;
+              setCheckoutRequestId(receipt);
+              setPaymentStatus('completed');
+              toast.success('Payment received! Finalizing application...');
+            },
+            onCancel: () => setPaymentStatus('idle'),
+            onError: () => setPaymentStatus('failed'),
+          });
+        }
+      } catch (err: any) {
+        console.error('HashPay modal trigger error:', err);
+        setPaymentStatus('failed');
+        toast.error('Failed to open payment modal. Please try again.');
+      }
     } else {
-      setPaymentStatus('failed');
-      toast.error(result.error || 'Payment failed');
+      // Fallback to direct STK push service
+      setPaymentStatus('processing');
+      const result = await MpesaService.initiateSTKPush(
+        mpesaNumber || phone || '',
+        brand.processingFee,
+        newApplicationId,
+        'anonymous',
+        brand.name
+      );
+
+      if (result.success && result.checkoutRequestId) {
+        setCheckoutRequestId(result.checkoutRequestId);
+        setIsPolling(true);
+        pollPaymentStatus(result.checkoutRequestId);
+      } else {
+        setPaymentStatus('failed');
+        toast.error(result.error || 'Payment failed');
+      }
     }
   };
 
