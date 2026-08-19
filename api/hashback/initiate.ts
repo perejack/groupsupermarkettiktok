@@ -4,11 +4,10 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-const PAYHERO_BASE_URL = "https://backend.payhero.co.ke";
-// Hardcoded for testing
-const PAYHERO_AUTH_TOKEN =
-  "Basic RTdMT0k0RGJvMlNMc3ZYOUNGdzg6ZU9sR1o4alBuZktVSXREMzdwb29yOG5ya1lSd2t4R0VFTjhabGlacg==";
-const PAYHERO_CHANNEL_ID = 11378;
+const HASHBACK_BASE_URL = "https://api.hashback.co.ke";
+// Fallbacks for testing (can be populated via environment variables or hardcoded values)
+const HASHBACK_API_KEY = process.env.HASHBACK_API_KEY || "";
+const HASHBACK_ACCOUNT_ID = process.env.HASHBACK_ACCOUNT_ID || "";
 
 function parseBody(req: { body?: unknown }): Record<string, unknown> {
   const raw = req.body;
@@ -29,38 +28,10 @@ function parseBody(req: { body?: unknown }): Record<string, unknown> {
 function normalizePhoneNumber(phone: string | undefined | null): string | null {
   if (!phone) return null;
   const cleaned = String(phone).replace(/\D/g, "");
-  if (cleaned.startsWith("0") && cleaned.length === 10) return cleaned;
-  if (cleaned.startsWith("254") && cleaned.length === 12) return `0${cleaned.slice(3)}`;
+  if (cleaned.startsWith("0") && cleaned.length === 10) return `254${cleaned.slice(1)}`;
+  if (cleaned.startsWith("254") && cleaned.length === 12) return cleaned;
   if ((cleaned.startsWith("7") || cleaned.startsWith("1")) && cleaned.length === 9) {
-    return `0${cleaned}`;
-  }
-  return null;
-}
-
-function getAuthHeader(): string {
-  const token = (process.env.PAYHERO_AUTH_TOKEN && process.env.PAYHERO_AUTH_TOKEN.trim()) || PAYHERO_AUTH_TOKEN;
-  return token.startsWith("Basic ") ? token : `Basic ${token}`;
-}
-
-function extractReference(data: Record<string, unknown>): string | null {
-  const direct =
-    data.reference ??
-    data.Reference ??
-    data.checkoutId ??
-    data.checkoutRequestId ??
-    data.CheckoutRequestID;
-  if (typeof direct === "string" && direct.trim()) return direct;
-
-  const nested = data.data;
-  if (nested && typeof nested === "object") {
-    const nestedObj = nested as Record<string, unknown>;
-    const nestedRef =
-      nestedObj.reference ??
-      nestedObj.Reference ??
-      nestedObj.checkoutId ??
-      nestedObj.checkoutRequestId ??
-      nestedObj.CheckoutRequestID;
-    if (typeof nestedRef === "string" && nestedRef.trim()) return nestedRef;
+    return `254${cleaned}`;
   }
   return null;
 }
@@ -71,15 +42,16 @@ export default async function handler(req: any, res: any) {
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
 
-  const authHeader = getAuthHeader();
-  const channelId = Number(process.env.PAYHERO_CHANNEL_ID || PAYHERO_CHANNEL_ID);
+  const apiKey = (process.env.HASHBACK_API_KEY && process.env.HASHBACK_API_KEY.trim()) || HASHBACK_API_KEY;
+  const accountId = (process.env.HASHBACK_ACCOUNT_ID && process.env.HASHBACK_ACCOUNT_ID.trim()) || HASHBACK_ACCOUNT_ID;
 
   try {
     const body = parseBody(req);
     const rawPhone =
       (typeof body.phone === "string" ? body.phone : undefined) ??
       (typeof body.phoneNumber === "string" ? body.phoneNumber : undefined) ??
-      (typeof body.phone_number === "string" ? body.phone_number : undefined);
+      (typeof body.phone_number === "string" ? body.phone_number : undefined) ??
+      (typeof body.msisdn === "string" ? body.msisdn : undefined);
 
     const normalizedPhone = normalizePhoneNumber(rawPhone);
     if (!normalizedPhone) {
@@ -99,48 +71,45 @@ export default async function handler(req: any, res: any) {
         : `${referencePrefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
     const payload = {
-      amount: Math.round(amount),
-      phone_number: normalizedPhone,
-      channel_id: channelId,
-      provider: "m-pesa",
-      external_reference: externalReference,
-      customer_name: typeof body.customer_name === "string" ? body.customer_name : undefined,
-      description: typeof body.description === "string" ? body.description : "food order",
+      api_key: apiKey,
+      account_id: accountId,
+      amount: String(Math.round(amount)),
+      msisdn: normalizedPhone,
+      reference: externalReference,
     };
 
-    const payheroRes = await fetch(`${PAYHERO_BASE_URL}/api/v2/payments`, {
+    const hashbackRes = await fetch(`${HASHBACK_BASE_URL}/initiatestk`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: authHeader,
       },
       body: JSON.stringify(payload),
     });
 
-    const data = (await payheroRes.json().catch(() => null)) as Record<string, unknown> | null;
+    const data = (await hashbackRes.json().catch(() => null)) as Record<string, unknown> | null;
 
-    if (!payheroRes.ok || !data) {
-      return res.status(payheroRes.status || 500).json({
+    if (!hashbackRes.ok || !data) {
+      return res.status(hashbackRes.status || 500).json({
         success: false,
         message:
           (typeof data?.message === "string" ? data.message : null) ??
           (typeof data?.error === "string" ? data.error : null) ??
-          "Payment initiation failed",
+          "HashBack STK initiation failed",
         raw: data,
       });
     }
 
-    const checkoutId = extractReference(data);
-    const success =
-      data.success === true ||
-      String(data.status ?? "").toLowerCase() === "success" ||
-      Boolean(checkoutId);
+    const checkoutId =
+      (typeof data.checkout_id === "string" ? data.checkout_id : null) ??
+      (typeof data.checkoutid === "string" ? data.checkoutid : null) ??
+      (typeof data.checkoutId === "string" ? data.checkoutId : null);
+
+    const success = data.success === true || Boolean(checkoutId);
 
     if (!success || !checkoutId) {
       return res.status(400).json({
         success: false,
-        message:
-          (typeof data.message === "string" ? data.message : null) ?? "Payment initiation failed",
+        message: (typeof data.message === "string" ? data.message : null) ?? "Payment initiation failed",
         raw: data,
       });
     }
@@ -150,7 +119,7 @@ export default async function handler(req: any, res: any) {
       checkoutId,
       checkoutRequestId: checkoutId,
       reference: externalReference,
-      normalizedPhone: `254${normalizedPhone.slice(1)}`,
+      normalizedPhone,
       message: typeof data.message === "string" ? data.message : "STK push initiated",
       raw: data,
     });

@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 
-// PayHero M-Pesa Integration Service
+// HashBack (HashPay) M-Pesa Integration Service
 export class MpesaService {
   static formatPhone(phone: string): string {
     let cleaned = phone.replace(/\D/g, "");
@@ -18,7 +18,7 @@ export class MpesaService {
     _supermarket: string,
   ): Promise<{ success: boolean; checkoutRequestId?: string; error?: string }> {
     try {
-      const response = await fetch("/api/payhero/initiate", {
+      const response = await fetch("/api/hashback/initiate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -36,7 +36,7 @@ export class MpesaService {
       const data = (await response.json().catch(() => null)) as Record<string, unknown> | null;
 
       if (!response.ok || !data || data.success === false) {
-        console.error("PayHero payment initiation failed:", data);
+        console.error("HashBack payment initiation failed:", data);
         return {
           success: false,
           error:
@@ -60,7 +60,7 @@ export class MpesaService {
         checkoutRequestId: checkoutId,
       };
     } catch (error: unknown) {
-      console.error("PayHero STK Push Error:", error);
+      console.error("HashBack STK Push Error:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to initiate payment",
@@ -71,7 +71,7 @@ export class MpesaService {
   static async getPaymentStatus(
     checkoutRequestId: string,
   ): Promise<"completed" | "failed" | "pending"> {
-    const response = await fetch("/api/payhero/status", {
+    const response = await fetch("/api/hashback/status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ checkoutId: checkoutRequestId }),
@@ -110,3 +110,4 @@ export class MpesaService {
     return "pending";
   }
 }
+

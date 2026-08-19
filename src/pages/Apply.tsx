@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -399,7 +399,7 @@ const Apply = () => {
       attempts++;
 
       try {
-        // Check payment status via PayHero
+        // Check payment status via HashBack
         const status = await MpesaService.getPaymentStatus(checkoutId);
 
         if (status === 'completed') {
