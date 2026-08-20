@@ -23,7 +23,7 @@ export const supermarketData: Record<string, SupermarketBrand> = {
     lightBg: "#F0FFF4",
     gradient: "from-green-50 to-emerald-50",
     image: "https://thesharpdaily.com/wp-content/uploads/Naivas.jpg",
-    processingFee: 145,
+    processingFee: 146,
   },
   carrefour: {
     name: "Carrefour",
